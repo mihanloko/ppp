@@ -1,0 +1,5 @@
+/CImg-2.9.3_pre101320/resources/CImg_reference.pdf
+/CImg-2.9.3_pre101320/examples/*
+/.idea
+/cmake-build-debug/*
+!/cmake-build-debug/image.bmp
