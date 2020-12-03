@@ -1,17 +1,26 @@
 #include <iostream>
+#include <thread>
 #include "CImg-2.9.3_pre101320/CImg.h"
+
 #define R 0
 #define G 1
 #define B 2
 
 using namespace cimg_library;
-using namespace std;
+//using namespace std;
+
+void test() {
+    std::cout << "Hello world" << std::endl;
+}
 
 int main() {
-    CImg<unsigned char> image = CImg<>("image.bmp").normalize(0,255);
+    CImg<unsigned char> image = CImg<>("image.bmp").normalize(0, 255);
     CImg<unsigned char> result = CImg<>(image);
 
-    cout << image.height() << " " << image.width() << endl;
+    std::thread t(test);
+
+
+    std::cout << image.height() << " " << image.width() << std::endl;
     int height = image.height(), width = image.width();
 /*    for (int i = 0; i < height; ++i) {
         for (int j = 0; j < width; ++j) {
@@ -33,22 +42,16 @@ int main() {
     int kernelWidth = 2;
     int kernelHeight = 2;
 
-    for (int x = 0; x < width; x++)
-    {
-        for (int y = 0; y < height; y++)
-        {
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
             double rSum = 0, gSum = 0, bSum = 0, kSum = 0;
 
-            for (int i = 0; i < kernelWidth; i++)
-            {
-                for (int j = 0; j < kernelHeight; j++)
-                {
+            for (int i = 0; i < kernelWidth; i++) {
+                for (int j = 0; j < kernelHeight; j++) {
                     int pixelPosX = x + (i - (kernelWidth / 2));
                     int pixelPosY = y + (j - (kernelHeight / 2));
-                    if ((pixelPosX < 0) ||
-                        (pixelPosX >= width) ||
-                        (pixelPosY < 0) ||
-                        (pixelPosY >= height)) continue;
+                    if ((pixelPosX < 0) || (pixelPosX >= width) || (pixelPosY < 0) || (pixelPosY >= height))
+                        continue;
 
                     byte r = image(x, y, R);
                     byte g = image(x, y, G);
@@ -80,9 +83,9 @@ int main() {
             if (bSum > 255) bSum = 255;
 
             //Записываем значения в результирующее изображение
-            result(x, y, R) = (byte)rSum;
-            result(x, y, G) = (byte)gSum;
-            result(x, y, B) = (byte)bSum;
+            result(x, y, R) = (byte) rSum;
+            result(x, y, G) = (byte) gSum;
+            result(x, y, B) = (byte) bSum;
         }
     }
 
