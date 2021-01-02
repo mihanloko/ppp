@@ -1,8 +1,0 @@
-﻿  lab8.cpp
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(49,25): warning C4244: инициализация: преобразование "double" в "long", возможна потеря данных
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(50,24): warning C4244: инициализация: преобразование "double" в "long", возможна потеря данных
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(56,1): warning C4326: возвращаемый тип "main" должен быть "int", а не "void"
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(85,35): warning C4018: <: несоответствие типов со знаком и без знака
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(91,23): warning C4244: =: преобразование "double" в "long", возможна потеря данных
-G:\c_projects\maga\ppp\lab8\lab8\lab8.cpp(100,25): warning C4244: =: преобразование "double" в "long", возможна потеря данных
-  lab8.vcxproj -> G:\c_projects\maga\ppp\lab8\Debug\lab8.exe
