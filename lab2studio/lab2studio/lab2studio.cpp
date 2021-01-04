@@ -8,6 +8,8 @@
 #define R 0
 #define G 1
 #define B 2
+#define KERNEL_WIDTH 3
+#define KERNEL_HEIGHT 3
 
 using namespace cimg_library;
 using namespace std;
@@ -15,7 +17,7 @@ using namespace std;
 CImg<unsigned char> image = CImg<>("small.bmp").normalize(0, 255);
 CImg<unsigned char> result = CImg<>(image);
 CImg<unsigned char> resultParallel = CImg<>(image);
-vector<vector<double>> kernel = {
+double kernel[KERNEL_HEIGHT][KERNEL_WIDTH] = {
         {0.75, 0.75, 0.75},
         {0.75, 0.75, 0.75},
         {0.75, 0.75, 0.75}
@@ -23,8 +25,8 @@ vector<vector<double>> kernel = {
 
 
 void testParallel(int x_start, int x_finish) {
-    int kernelWidth = kernel[0].size();
-    int kernelHeight = kernel.size();
+    int kernelWidth = KERNEL_WIDTH;
+    int kernelHeight = KERNEL_HEIGHT;
     int height = image.height(), width = image.width();
 
     double rSum = 0, gSum = 0, bSum = 0, kSum = 0;
@@ -82,12 +84,12 @@ int main() {
     vector<thread> threads;
 
     cout << "Размер изображения: " << image.height() << " * " << image.width() << "\n";
-    cout << "Размер ядра свертки: " << kernel.size() << " * " << kernel.size() << "\n";
+    cout << "Размер ядра свертки: " << KERNEL_WIDTH << " * " << KERNEL_HEIGHT << "\n";
     int height = image.height(), width = image.width();
 
 
-    int kernelWidth = kernel[0].size();
-    int kernelHeight = kernel.size();
+    int kernelWidth = KERNEL_WIDTH;
+    int kernelHeight = KERNEL_HEIGHT;
 
     cout << "Выполняем фтльтрацию в одном потоке\n";
     auto begin = chrono::high_resolution_clock::now();
