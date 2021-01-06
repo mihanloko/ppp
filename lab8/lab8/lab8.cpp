@@ -4,180 +4,156 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <thread>
+#include <locale.h>
+#include "CImg-2.9.3_pre101320/CImg.h"
 #include "mpi.h"
 
+#define R 0
+#define G 1
+#define B 2
+#define KERNEL_WIDTH 3
+#define KERNEL_HEIGHT 3
+
+using namespace cimg_library;
 using namespace std;
 
-// классическое правило Эратосфена
-vector<long int> Eratosthenes(long int n, vector<bool>& SIEVE)
-{
-    vector<long int> result;
-    SIEVE[0] = SIEVE[1] = false;
+CImg<unsigned char> image = CImg<>("small.bmp").normalize(0, 255);
+CImg<unsigned char> result = CImg<>(image);
+double kernel[KERNEL_HEIGHT][KERNEL_WIDTH] = {
+        {0.75, 0.75, 0.75},
+        {0.75, 0.75, 0.75},
+        {0.75, 0.75, 0.75}
+};
 
-    for (long int i = 2; i < n; ++i)
-    {
-        for (int j = i + i; j < n; j += i)
-        {
-            SIEVE[j] = false;
-        }
-        if (SIEVE[i])
-            result.push_back(i);
-    }
-    return result;
-}
 
-// выполнение проверки в заданных границах
-void EratosthenesTick(long int start, long int end, long int* base_primes, long int base_size, bool* local_sieve)
-{
-    long int size = end - start;
+void proccessBlock(int x_start, int x_finish) {
+    int kernelWidth = KERNEL_WIDTH;
+    int kernelHeight = KERNEL_HEIGHT;
+    int height = image.height(), width = image.width();
 
-    for (long int i = start; i < end; ++i)
-    {
-        for (long int j = 0; j < base_size; ++j)
-        {
-            if (i % base_primes[j] == 0)
-            {
-                local_sieve[i - start] = false; // в локальном массиве ставим ложь
+    double rSum = 0, gSum = 0, bSum = 0, kSum = 0;
+
+    for (int x = x_start; x < x_finish; x++) {
+        for (int y = 0; y < height; y++) {
+            double rSum = 0, gSum = 0, bSum = 0, kSum = 0;
+
+            for (int i = 0; i < kernelWidth; i++) {
+                for (int j = 0; j < kernelHeight; j++) {
+                    int pixelPosX = x + (i - (kernelWidth / 2));
+                    int pixelPosY = y + (j - (kernelHeight / 2));
+                    if ((pixelPosX < 0) || (pixelPosX >= width) || (pixelPosY < 0) || (pixelPosY >= height))
+                        continue;
+
+                    byte r = image(x, y, R);
+                    byte g = image(x, y, G);
+                    byte b = image(x, y, B);
+
+                    double kernelVal = kernel[i][j];
+
+                    rSum += r * kernelVal;
+                    gSum += g * kernelVal;
+                    bSum += b * kernelVal;
+
+                    kSum += kernelVal;
+                }
             }
+
+            if (kSum <= 0) kSum = 1;
+
+            //Контролируем переполнения переменных
+            rSum /= kSum;
+            if (rSum < 0) rSum = 0;
+            if (rSum > 255) rSum = 255;
+
+            gSum /= kSum;
+            if (gSum < 0) gSum = 0;
+            if (gSum > 255) gSum = 255;
+
+            bSum /= kSum;
+            if (bSum < 0) bSum = 0;
+            if (bSum > 255) bSum = 255;
+
+            //Записываем значения в результирующее изображение
+            result(x, y, R) = (byte)rSum;
+            result(x, y, G) = (byte)gSum;
+            result(x, y, B) = (byte)bSum;
         }
     }
 }
-
-// Работа с блоком
-void BlockBolting(long int border, long int step, int ProcRank, bool* local_sieve, long int* base_primes, long int base_prime_size)
-{
-    long int first_elem = floor(border + step * (ProcRank));
-    long int last_elem = floor(border + step * (ProcRank + 1));
-    cout << "~Proc" << ProcRank << " deals with [" << first_elem << ";" << last_elem << "]" << endl;
-    EratosthenesTick(first_elem, last_elem, base_primes, base_prime_size, local_sieve);
-}
-
 void main(int argc, char* argv[])
 {
     setlocale(LC_ALL, "Russian");
-    ofstream fout;
+
+    int height = image.height(), width = image.width();
+    
     MPI_Status status;
 
-    vector<long int> SIZE = { 10000 }; //{ 1000, 10000, 100000, 1000000, 10000000 };
+    int threadsCount; // число процессов
+    int currentThread; // номер процесса
 
-    long int border; // граница sqrt(n)
-    long int step;  // фактически длина блока
-    int ProcNum; // число процессов
-    int ProcRank; // номер процесса
-
-
-    long int* base_primes; // базовые простые числа
-    vector<long int> primes; // все праймы
-    vector<bool> SIEVE; // полное решето
-    bool* local_sieve; // местный массив
+    int flag;
+    int* model;
 
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &ProcNum);
-    MPI_Comm_rank(MPI_COMM_WORLD, &ProcRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &threadsCount);
+    MPI_Comm_rank(MPI_COMM_WORLD, &currentThread);
 
-    if (ProcRank == 0)
-    {
-        cout << "_MPI variant_ " << endl;
-        cout << "ProcNum: " << ProcNum << endl;
-        cout << "--------------------" << endl;
+    // нулевой поток
+    if (currentThread == 0) {
+
+        auto begin = chrono::high_resolution_clock::now();
+        
+        int step = (width / threadsCount) + 1;
+        int left = 0 + step;
+        int right = min(left + step, width);
+        byte* r = new byte[100];
+        // отправка на потоки
+        
+
+        for (int i = 1; i < threadsCount; ++i) {
+
+            MPI_Send(&height, 1, MPI_INT, i, 50, MPI_COMM_WORLD);
+            MPI_Send(&width, 1, MPI_INT, i, 51, MPI_COMM_WORLD);
+            MPI_Send(&left, 1, MPI_INT, i, 52, MPI_COMM_WORLD);
+            MPI_Send(&right, 1, MPI_INT, i, 53, MPI_COMM_WORLD);
+
+            
+            left += step;
+            right = min(left + step, width);
+        }
+        // работа со своим блоком
+        proccessBlock(0, min(step, width));
+
+        for (int i = 1; i < threadsCount; ++i) {
+
+            bool res;
+            MPI_Recv(&res, 1, MPI_C_BOOL, i, 100, MPI_COMM_WORLD, &status);
+
+        }
+
+        result.save("result.bmp");
+
+        auto elapsedTime = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - begin).count();
+        cout << "time " << elapsedTime << " ms\n";
     }
+    else {
 
-    for (int curSize = 0; curSize < SIZE.size(); ++curSize)
-    {
-        SIEVE.resize(SIZE[curSize], true);
-        SIEVE[0] = SIEVE[1] = false;
+        int left, right;
+        // принимаем данные из потока 0
+        MPI_Recv(&height, 1, MPI_INT, 0, 50, MPI_COMM_WORLD, &status);
+        MPI_Recv(&width, 1, MPI_INT, 0, 51, MPI_COMM_WORLD, &status);
+        MPI_Recv(&left, 1, MPI_INT, 0, 52, MPI_COMM_WORLD, &status);
+        MPI_Recv(&right, 1, MPI_INT, 0, 53, MPI_COMM_WORLD, &status);
 
-        // находим базовые простые
-        border = floor(sqrt(SIZE[curSize]));
-        vector<long int> v_base_primes = Eratosthenes(border, SIEVE);
-        long int base_prime_size = v_base_primes.size();
-        base_primes = (long int*)malloc(base_prime_size * sizeof(long int));
-        copy(v_base_primes.begin(), v_base_primes.end(), base_primes);
-
-        // нулевой поток
-        if (ProcRank == 0)
-        {
-            step = floor((SIZE[curSize] - border) / (ProcNum)); // вычисление размера одного блока
-            auto begin = chrono::high_resolution_clock::now();
-
-            // отправка на потоки
-            for (int i = 1; i < ProcNum; ++i)
-            {
-                MPI_Send(&step, 1, MPI_LONG_INT, i, 50, MPI_COMM_WORLD);
-            }
-            // работа со своим блоком
-            local_sieve = (bool*)malloc(step * sizeof(bool));
-            BlockBolting(border, step, ProcRank, local_sieve, base_primes, base_prime_size);
-            for (int i = 0; i < step; ++i)
-            {
-                SIEVE[border + i] = local_sieve[i];
-            }
-            // приём и обработка
-            for (int i = 1; i < ProcNum; ++i)
-            {
-
-                bool* rbuf; // буфер для приёма данных из потоков
-                rbuf = (bool*)malloc(step * sizeof(bool));
-
-                cout << "~root" << ProcRank << " recieving from <= " << i << endl;
-
-                // получаем данные в буфер
-                MPI_Recv(rbuf, step, MPI_C_BOOL, i, 50, MPI_COMM_WORLD, &status);
-
-                cout << "~root" << ProcRank << " recieved data from " << i << endl;
-
-                // на основе полученнных данных, изменяем решето
-                for (int j = 0; j < step; j++)
-                {
-                    SIEVE[border + (i - 1) * step + j] = rbuf[j];
-                }
-
-                free(rbuf);
-            }
-            auto elapsedTime = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - begin).count();
-            cout << "--------------------" << endl;
-            cout << "Size: " << SIZE[curSize] << endl;
-            cout << "Time: " << elapsedTime << "ms" << endl;
-            cout << "--------------------" << endl;
-        }
-        else
-        {
+        
+        proccessBlock(left, right);
 
 
-            // принимаем данные из потока 0
-            MPI_Recv(&step, 1, MPI_LONG_INT, 0, 50, MPI_COMM_WORLD, &status);
+        bool res = true;
+        // посылаем локальные данные в нулевой поток
+        MPI_Send(&res, 1, MPI_C_BOOL, 0, 100, MPI_COMM_WORLD);
 
-            cout << "~Proc" << ProcRank << " + recieved data from root0: " << endl;
-
-            local_sieve = (bool*)malloc(step * sizeof(bool));
-            BlockBolting(border, step, ProcRank, local_sieve, base_primes, base_prime_size);
-
-            cout << "~Proc" << ProcRank << " sending... => root0" << endl;
-
-            // посылаем локальные данные в нулевой поток
-            MPI_Send(local_sieve, step, MPI_C_BOOL, 0, 50, MPI_COMM_WORLD);
-
-            cout << "~Proc" << ProcRank << " already send => root0" << endl;
-        }
-        free(base_primes);
-        free(local_sieve);
-        /*
-        // вывод в файл
-        if (ProcRank == 0)
-        {
-            ofstream fout;
-            fout.open("file.txt", ios::app);
-            fout << endl;
-            fout << SIZE << endl;
-            for (int i = 0; i < SIEVE.size(); i++)
-            {
-                if (SIEVE[i])
-                    fout << i << " ";
-            }
-            fout << endl;
-            fout.close();
-        }
-         */
     }
 
 

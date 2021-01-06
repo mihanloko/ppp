@@ -14,7 +14,7 @@
 using namespace cimg_library;
 using namespace std;
 
-CImg<unsigned char> image = CImg<>("small.bmp").normalize(0, 255);
+CImg<unsigned char> image = CImg<>("big.bmp").normalize(0, 255);
 CImg<unsigned char> result = CImg<>(image);
 CImg<unsigned char> resultParallel = CImg<>(image);
 double kernel[KERNEL_HEIGHT][KERNEL_WIDTH] = {
@@ -142,7 +142,7 @@ int main() {
     auto elapsedTime = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - begin).count();
     cout << "Затраченное время " << elapsedTime << " милисекунд\n";
 
-    int threadsCount = 24;
+    int threadsCount = 6;
     int step = (width / threadsCount) + 1;    
 
 

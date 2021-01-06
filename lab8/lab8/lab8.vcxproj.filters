@@ -18,8 +18,5 @@
     <ClCompile Include="lab8.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\lab2studio\lab2studio\lab2studio.cpp">
-      <Filter>Исходные файлы</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>
