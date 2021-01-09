@@ -5,14 +5,6 @@
 
 using namespace std;
 
-CONDITION_VARIABLE    BufferNotEmpty;
-CRITICAL_SECTION           BufferLock;
-
-
-class Human;
-class SpaceShip;
-
-
 class TSemaphore {
 private:
     HANDLE Sem;
@@ -53,32 +45,59 @@ class TChannel {
 private:
     TSemaphore* free;
     TSemaphore* empty;
-    TData data;
+    HANDLE fileMem;
+    void* buffer;
 public:
 
     void put(TData t) {
         free->P();
-        data = t;
+        CopyMemory((PVOID)buffer, &t, sizeof(TData));
         empty->V();
     }
 
     TData get() {
         TData data;
         empty->P();
-        data = this->data;
+        CopyMemory(&data, (PVOID)buffer, sizeof(TData));
         free->V();
         return data;
     }
 
     TChannel(string name1, string name2) {
+        //data = TData();
         free = new TSemaphore(name1.c_str(), 1);
         empty = new TSemaphore(name2.c_str(), 0);
+        fileMem = OpenFileMapping(
+            FILE_MAP_ALL_ACCESS,
+            // все права на файл, кроме FILE_MAP_EXECUTE
+            false,     //  handle  не наследуется при CreateProcess
+            (LPCWSTR)(name1 + name2).c_str());
+        if (fileMem == NULL)
+            fileMem = CreateFileMapping(
+                (HANDLE)0xFFFFFFFF,
+                //   INVALID_HANDLE_VALUE --- СОЗДАЕМ НОВЫЙ
+                NULL,  // LPSECURITY_ATTRIBUTES 
+                PAGE_READWRITE,    //  вид доступа к данным
+                0, 4096,   // размер
+                (LPCWSTR)(name1 + name2).c_str());
+        if (fileMem != NULL)
+            buffer = MapViewOfFile(
+                fileMem,   // Handle файла
+                FILE_MAP_ALL_ACCESS,
+                0, 0,  // смещение
+                4096);   // длина данных
+        else {
+            printf("error: FILE_MAP \n");
+            exit(1);
+            // Все плохо!!!!
+        }
     }
     ~TChannel() {
         delete free;
         delete empty;
     }
 };
+
 
 class Runnable {
 public:
@@ -105,30 +124,27 @@ public:
         for (;;) {
             TData data(rand());
             ticketChanel->put(data);
-            /*logSemaphore->P();
+            logSemaphore->P();
             cout << "Отправлен билет с id " << data.id << endl;
-            logSemaphore->V();*/
+            logSemaphore->V();
         }
     }
 };
 
-vector<Human*> humansQueue;
 
 class Human : public Runnable {
 private:
 
     int id;
     int state = 0;
-    // 0 - покупка
-    // 1 - полет
-    // 2 - ожидание
-    // 3 конференция
-    // 4 перезапуск
 public:
     Human(int id) {
         this->id = id;
     }
-
+    // 0 - покупка
+    // 1 - полет
+    // 2 конференция
+    // 3 перезапуск
     void run() override {
         srand(time(NULL));
         TData data;
@@ -137,47 +153,33 @@ public:
             {
             case 0:
                 data = ticketChanel->get();
-               /* logSemaphore->P();
+                logSemaphore->P();
                 cout << "Куплен билет с id " << data.id << endl;
-                logSemaphore->V();*/
+                logSemaphore->V();
                 state++;
                 break;
             case 1:
                 logSemaphore->P();
-                cout << "Производитель " << id << ": Человек с id " << id << " встает в очередь на транспорт\n";
+                cout << "Человек с id " << id << " отправляется в порт\n";
                 logSemaphore->V();
-
-                EnterCriticalSection(&BufferLock);
-
-
-                // внесем товар в конец очереди 
-                humansQueue.push_back(this);
-
-                LeaveCriticalSection(&BufferLock);
-
-                // Если потребитель ждет, разбудим его
-                WakeConditionVariable(&BufferNotEmpty);
-                
+                portChanel->put(TData(id));
                 state++;
                 break;
             case 2:
-                Sleep(50);
-                break;
-            case 3:
-                /*data = humanChanel->get();
+                data = humanChanel->get();
                 logSemaphore->P();
                 cout << "Человек с id " << id << " отправляется на конференцию\n";
-                logSemaphore->V();*/
+                logSemaphore->V();
                 conferenceChanel->put(TData(id));
                 state++;
                 break;
-            case 4:
+            case 3:
                 freeSemaphore->P();
-                /*logSemaphore->P();
+                logSemaphore->P();
                 cout << "Человек с id " << id << " освободился и начинает заново\n\n";
-                logSemaphore->V();*/
+                logSemaphore->V();
                 state = 0;
-                Sleep(1500);
+                Sleep(500);
                 break;
             default:
                 state = 0;
@@ -185,59 +187,30 @@ public:
             }
         }
     }
-
-    int getId() {
-        return id;
-    }
-
-    void increaseState() {
-        state++;
-    }
 };
 
 class SpaceShip : public Runnable {
 private:
-    int id;
-    Human *human = 0;
+    int humanId = -1;
 public:
-    SpaceShip(int id) {
-        this->id = id;
-    }
-
     void run() override {
         srand(time(NULL));
         TData data;
         for (;;) {
-            if (human == 0) {
-                /*data = spaceshipChanel->get();
+            if (humanId == -1) {
+                data = spaceshipChanel->get();
                 logSemaphore->P();
                 cout << "На борт принят человек с id " << data.id << endl;
                 logSemaphore->V();
-                humanId = data.id;*/
-                EnterCriticalSection(&BufferLock);
-                SleepConditionVariableCS(
-                    &BufferNotEmpty, &BufferLock, INFINITE);
-
-                // Потребитель забирает первый доступный товар
-                Human* data = humansQueue.front();
-                humansQueue.erase(humansQueue.begin());
-
-                LeaveCriticalSection(&BufferLock);
-
-
-                human = data;
-                logSemaphore->P();
-                cout << "Потребитель " << id << ": На борт принят человек с id " << human->getId() << endl;
-                logSemaphore->V();
-
+                humanId = data.id;
             }
             else {
                 Sleep(500);
-                /*logSemaphore->P();
-                cout << "Человек с id " << human->getId() << " прибывает на конференцию\n";
-                logSemaphore->V();*/
-                human->increaseState();
-                human = 0;
+                logSemaphore->P();
+                cout << "Человек с id " << humanId << " прибывает на конференцию\n";
+                logSemaphore->V();
+                humanChanel->put(TData(humanId));
+                humanId = -1;
             }
         }
     }
@@ -253,15 +226,15 @@ public:
         for (;;) {
             if (humanId == -1) {
                 data = portChanel->get();
-                /*logSemaphore->P();
+                logSemaphore->P();
                 cout << "Принят человек с id " << data.id << endl;
-                logSemaphore->V();*/
+                logSemaphore->V();
                 humanId = data.id;
             }
             else {
-                /*logSemaphore->P();
+                logSemaphore->P();
                 cout << "Человек с id " << humanId << " отправляется на корабль\n";
-                logSemaphore->V();*/
+                logSemaphore->V();
                 spaceshipChanel->put(TData(humanId));
                 humanId = -1;
             }
@@ -280,16 +253,16 @@ public:
         for (;;) {
             if (humanId == -1) {
                 data = conferenceChanel->get();
-                /*logSemaphore->P();
+                logSemaphore->P();
                 cout << "На конференцию принят человек с id " << data.id << endl;
-                logSemaphore->V();*/
+                logSemaphore->V();
                 humanId = data.id;
             }
             else {
                 Sleep(500);
-                /*logSemaphore->P();
+                logSemaphore->P();
                 cout << "Человек с id " << humanId << " послушал конференцию и уходит\n";
-                logSemaphore->V();*/
+                logSemaphore->V();
                 freeSemaphore->V();
                 humanId = -1;
             }
@@ -299,48 +272,28 @@ public:
 
 int main()
 {
-    InitializeConditionVariable(&BufferNotEmpty);
-
-    InitializeCriticalSection(&BufferLock);
-
     srand(time(NULL));
     setlocale(LC_ALL, "Russian");
     vector<thread> threads;
 
     TicketWindow* ticketWindow;
+    Human* human;
+    SpaceShip* spaceShip;
     Spaceport* spaceport;
     Conference* conference;
 
 
     ticketWindow = new TicketWindow();
-    Human *human1 = new Human(1);
-    Human* human2 = new Human(2);
-    Human* human3 = new Human(3);
-    Human* human4 = new Human(4);
-    Human* human5 = new Human(5);
-    SpaceShip* spaceShip1 = new SpaceShip(1);
-    SpaceShip* spaceShip2 = new SpaceShip(2);
-    SpaceShip* spaceShip3 = new SpaceShip(3);
+    human = new Human();
+    spaceShip = new SpaceShip();
     spaceport = new Spaceport();
     conference = new Conference();
 
     threads.push_back(thread(run, std::ref(ticketWindow)));
     Sleep(1);
-    threads.push_back(thread(run, std::ref(human1)));
+    threads.push_back(thread(run, std::ref(human)));
     Sleep(1);
-    threads.push_back(thread(run, std::ref(human2)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(human3)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(human4)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(human5)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(spaceShip1)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(spaceShip2)));
-    Sleep(1);
-    threads.push_back(thread(run, std::ref(spaceShip3)));
+    threads.push_back(thread(run, std::ref(spaceShip)));
     Sleep(1);
     threads.push_back(thread(run, std::ref(spaceport)));
     Sleep(1);
